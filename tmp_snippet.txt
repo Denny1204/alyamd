@@ -1,0 +1,66 @@
+04880: '\t        try {\n'
+04881: '\t            const channelId = await resolveYoutubeChannelId(param)\n'
+04882: '\t            const idx = ytNotify.channels.findIndex(c => c.id === channelId)\n'
+04883: "\t            if (idx === -1) return reply('Channel tidak ditemukan di daftar.')\n"
+04884: '\t            ytNotify.channels.splice(idx, 1)\n'
+04885: '\t            saveYtNotify()\n'
+04886: "\t            reply('✅ Channel berhasil dihapus dari daftar.')\n"
+04887: '\t        } catch (e) {\n'
+04888: '\t            reply(`Gagal menghapus: ${e.message}`)\n'
+04889: '\t        }\n'
+04890: "\t    } else if (sub === 'list') {\n"
+04891: "\t        if (!ytNotify.channels.length) return reply('Belum ada channel yang terdaftar.')\n"
+04892: "\t        let teks = '📌 *Daftar Channel YouTube*\\n\\n'\n"
+04893: '\t        ytNotify.channels.forEach((c, i) => {\n'
+04894: '\t            teks += `${i + 1}. ${c.title || c.url}\\nID: ${c.id}\\nLink: ${c.url}\\n\\n`\n'
+04895: '\t        })\n'
+04896: '\t        reply(teks)\n'
+04897: "\t    } else if (sub === 'group') {\n"
+04898: "\t        const action = (args[1] || '').toLowerCase()\n"
+04899: "\t        if (!action) return reply('Gunakan: .ytnotif group add|remove|list')\n"
+04900: "\t        if (action === 'add') {\n"
+04901: '\t            const groupId = (args[2] || from)\n'
+04902: "\t            if (!groupId.endsWith('@g.us')) return reply('Hanya bisa menambahkan grup.')\n"
+04903: "\t            if (ytNotify.groups.includes(groupId)) return reply('Grup sudah terdaftar.')\n"
+04904: '\t            ytNotify.groups.push(groupId)\n'
+04905: '\t            saveYtNotify()\n'
+04906: "\t            reply('✅ Grup berhasil ditambahkan untuk notifikasi YouTube.')\n"
+04907: "\t        } else if (action === 'remove' || action === 'del') {\n"
+04908: '\t            const groupId = (args[2] || from)\n'
+04909: '\t            const idx = ytNotify.groups.indexOf(groupId)\n'
+04910: "\t            if (idx === -1) return reply('Grup tidak ditemukan di daftar.')\n"
+04911: '\t            ytNotify.groups.splice(idx, 1)\n'
+04912: '\t            saveYtNotify()\n'
+04913: "\t            reply('✅ Grup berhasil dihapus dari daftar notifikasi.')\n"
+04914: "\t        } else if (action === 'list') {\n"
+04915: "\t            if (!ytNotify.groups.length) return reply('Belum ada grup yang terdaftar.')\n"
+04916: "\t            reply('📌 Grup yang menerima notifikasi:\\n' + ytNotify.groups.join('\\n'))\n"
+04917: '\t        } else {\n'
+04918: "\t            reply('Gunakan: .ytnotif group add|remove|list')\n"
+04919: '\t        }\n'
+04920: '\t    } else {\n'
+04921: "\t        reply('Command tidak dikenal. Gunakan .ytnotif untuk bantuan.')\n"
+04922: '\t    }\n'
+04923: '\t}\n'
+04924: 'break\n'
+04925: "\tcase 'stickerpack': {\n"
+04926: '  try {\n'
+04927: "    const scraper = require('./fitur/stickerpack')\n"
+04928: "    const axios = require('axios')\n"
+04929: "    const { createSticker, StickerTypes } = require('wa-sticker-formatter')\n"
+04930: '\n'
+04931: '    if (!text)\n'
+04932: '      return reply(`Contoh:\\n${prefix + command} blue archive`)\n'
+04933: '\n'
+04934: "    if (text.startsWith('pick')) {\n"
+04935: '\n'
+04936: "      const slug = text.split(' ')[1]\n"
+04937: "      if (!slug) return reply('error hehe.')\n"
+04938: '\n'
+04939: '      const data = await scraper.detail(slug)\n'
+04940: '      if (!data || !data.stickers.length)\n'
+04941: "        return reply('Stickernya kosong atau gagal mengambil data.')\n"
+04942: '\n'
+04943: '      global.stickerSession[m.sender] = data\n'
+04944: '\n'
+04945: '      const total = data.stickers.length\n'

@@ -405,7 +405,93 @@ let tebakanml = {}
 global.tebakanml = tebakanml
 let autosahurData = JSON.parse(fs.readFileSync(autosahurFile, 'utf-8'))
 
+const ytNotifyFile = './database/ytnotify.json'
+let ytNotify = loadJSON(ytNotifyFile, { channels: [], groups: [] })
+
 let sahurCronStarted = false
+let ytNotifyCronStarted = false
+
+const saveYtNotify = () => {
+  fs.writeFileSync(ytNotifyFile, JSON.stringify(ytNotify, null, 2))
+}
+
+async function resolveYoutubeChannelId(url) {
+  url = (url || '').trim()
+  if (!url) throw new Error('Link tidak boleh kosong')
+  if (!/^https?:\/\//i.test(url)) url = 'https://' + url
+
+  const channelIdMatch = url.match(/youtube\.com\/channel\/(UC[0-9A-Za-z_-]{22,})/i)
+  if (channelIdMatch) return channelIdMatch[1]
+
+  // If url is a video link, attempt to extract channel id from the video page
+  if (/youtube\.com\/(watch\?|shorts\/|v\/)/i.test(url) || /youtu\.be\//i.test(url)) {
+    const res = await axios.get(url, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' } })
+    const body = res.data
+    const match = body.match(/"channelId"\s*:\s*"(UC[0-9A-Za-z_-]{22})"/)
+    if (match) return match[1]
+  }
+
+  // For /c/ or /user/ or @handle, fetch page and parse channelId
+  const res = await axios.get(url, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' } })
+  const body = res.data
+  const match = body.match(/"channelId"\s*:\s*"(UC[0-9A-Za-z_-]{22})"/)
+  if (match) return match[1]
+
+  throw new Error('Tidak dapat mendapatkan Channel ID dari link tersebut')
+}
+
+async function fetchLatestYouTubeVideo(channelId) {
+  const rssUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`
+  const res = await axios.get(rssUrl, { timeout: 20000, headers: { 'User-Agent': 'Mozilla/5.0' } })
+  const xml = res.data || ''
+
+  const entryMatch = xml.match(/<entry>([\s\S]*?)<\/entry>/i)
+  if (!entryMatch) throw new Error('RSS feed tidak valid atau tidak ditemukan')
+  const entry = entryMatch[1]
+
+  const vidId = (entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/i) || entry.match(/<videoId>([^<]+)<\/videoId>/i) || [])[1]
+  const title = (entry.match(/<title>([^<]+)<\/title>/i) || [])[1] || ''
+  const link = (entry.match(/<link[^>]*rel="alternate"[^>]*href="([^"]+)"/i) || [])[1] || `https://youtu.be/${vidId}`
+  const author = (xml.match(/<author>[\s\S]*?<name>([^<]+)<\/name>/i) || [])[1] || ''
+
+  return { id: vidId, title, link, author }
+}
+
+function startYouTubeNotify(hydro) {
+  if (ytNotifyCronStarted) return
+  ytNotifyCronStarted = true
+  nodecron.schedule('*/10 * * * *', async () => {
+    try {
+      if (!ytNotify.groups?.length || !ytNotify.channels?.length) return
+
+      for (const channel of ytNotify.channels) {
+        try {
+          const latest = await fetchLatestYouTubeVideo(channel.id)
+          if (!latest || !latest.id) continue
+          if (channel.lastVideoId && channel.lastVideoId === latest.id) continue
+
+          // Update stored value before sending to avoid duplicates on crash
+          channel.lastVideoId = latest.id
+          saveYtNotify()
+
+          const message = `📢 *YouTube Update*
+
+Channel: *${latest.author || channel.title || 'Unknown'}*
+Judul: *${latest.title}*
+Link: ${latest.link}`
+
+          for (const groupId of ytNotify.groups) {
+            await hydro.sendMessage(groupId, { text: message }).catch(_ => _)
+          }
+        } catch (e) {
+          // ignore per-channel errors
+        }
+      }
+    } catch (e) {
+      console.log('YouTube Notify Error:', e)
+    }
+  }, { scheduled: true, timezone: 'Asia/Jakarta' })
+}
 
 function startAutoSahur(hydro) {
     if (sahurCronStarted) return
@@ -447,11 +533,12 @@ function startAutoSahur(hydro) {
     })
 }
 
-module.exports = hydro = async (hydro, m, chatUpdate, store) => {
+module.exports = async (hydro, m, chatUpdate, store) => {
 try {
 // ⬇️ hapus // untuk mengaktifkan delay
   // await sleep(2000)  // 1000 = 1 detik
   startAutoSahur(hydro)
+  startYouTubeNotify(hydro)
   
         const { type, quotedMsg, mentioned, now, fromMe } = m
         const body = (m.mtype === 'conversation') ? m.message.conversation : (m.mtype == 'imageMessage') ? m.message.imageMessage.caption : (m.mtype == 'videoMessage') ? m.message.videoMessage.caption : (m.mtype == 'extendedTextMessage') ? m.message.extendedTextMessage.text : (m.mtype == 'buttonsResponseMessage') ? m.message.buttonsResponseMessage.selectedButtonId : (m.mtype == 'listResponseMessage') ? m.message.listResponseMessage.singleSelectReply.selectedRowId : (m.mtype == 'templateButtonReplyMessage') ? m.message.templateButtonReplyMessage.selectedId : (m.mtype === 'messageContextInfo') ? (m.message.buttonsResponseMessage?.selectedButtonId || m.message.listResponseMessage?.singleSelectReply.selectedRowId || m.text) : `.`
@@ -4746,6 +4833,104 @@ break
         replyhydro('Gunakan: .autosahur on/off')
     }
 }
+break
+	case 'ytnotif':
+	case 'ytnotify':
+	case 'youtube-notify': {
+	    if (!Ahmad && !isGroupAdmins) return replytolak(global.mess.only.admin)
+
+	    const sub = (args[0] || '').toLowerCase()
+	    const param = args.slice(1).join(' ').trim()
+
+	    if (!sub) {
+	        return reply(`📌 *YouTube Notify*
+
+Gunakan:
+.ytnotif add <link>
+.ytnotif remove <link>
+.ytnotif list
+.ytnotif group add
+.ytnotif group remove
+.ytnotif group list`)
+	    }
+
+	    if (sub === 'add') {
+	        if (!param) return reply('Masukkan link channel YouTube yang valid!')
+	        try {
+	            const channelId = await resolveYoutubeChannelId(param)
+	            const already = ytNotify.channels.find(c => c.id === channelId)
+	            if (already) return reply('Channel telah terdaftar.')
+
+	            const latest = await fetchLatestYouTubeVideo(channelId)
+	            if (!latest || !latest.id) return reply('Gagal mengambil video terbaru, pastikan channel valid.')
+
+	            ytNotify.channels.push({
+	                id: channelId,
+	                url: param,
+	                title: latest.author || latest.title || param,
+	                lastVideoId: latest.id
+	            })
+	            saveYtNotify()
+	            reply(`✅ Berhasil menambahkan channel untuk notifikasi. Saya akan mengirim notifikasi saat ada upload baru dari *${ytNotify.channels.at(-1).title}*`) 
+	        } catch (e) {
+	            reply(`Gagal menambahkan: ${e.message}`)
+	        }
+	    } else if (sub === 'remove' || sub === 'del') {
+	        if (!param) return reply('Masukkan link channel atau ID yang ingin dihapus!')
+	        try {
+	            const channelId = await resolveYoutubeChannelId(param)
+	            const idx = ytNotify.channels.findIndex(c => c.id === channelId)
+	            if (idx === -1) return reply('Channel tidak ditemukan di daftar.')
+	            ytNotify.channels.splice(idx, 1)
+	            saveYtNotify()
+	            reply('✅ Channel berhasil dihapus dari daftar.')
+	        } catch (e) {
+	            reply(`Gagal menghapus: ${e.message}`)
+	        }
+	    } else if (sub === 'list') {
+	        if (!ytNotify.channels.length) return reply('Belum ada channel yang terdaftar.')
+	        let teks = '📌 *Daftar Channel YouTube*\n\n'
+	        ytNotify.channels.forEach((c, i) => {
+	            teks += `${i + 1}. ${c.title || c.url}\nID: ${c.id}\nLink: ${c.url}\n\n`
+	        })
+	        reply(teks)
+	    } else if (sub === 'group') {
+	        const action = (args[1] || '').toLowerCase()
+	        if (!action) return reply('Gunakan: .ytnotif group add|remove|list')
+	        if (action === 'add') {
+	            const groupId = (args[2] || from)
+	            if (!groupId.endsWith('@g.us')) return reply('Hanya bisa menambahkan grup.')
+	            if (ytNotify.groups.includes(groupId)) return reply('Grup sudah terdaftar.')
+	            ytNotify.groups.push(groupId)
+	            saveYtNotify()
+	            reply('✅ Grup berhasil ditambahkan untuk notifikasi YouTube.')
+	        } else if (action === 'remove' || action === 'del') {
+	            const groupId = (args[2] || from)
+	            const idx = ytNotify.groups.indexOf(groupId)
+	            if (idx === -1) return reply('Grup tidak ditemukan di daftar.')
+	            ytNotify.groups.splice(idx, 1)
+	            saveYtNotify()
+	            reply('✅ Grup berhasil dihapus dari daftar notifikasi.')
+	        } else if (action === 'list') {
+	            if (!ytNotify.groups.length) return reply('Belum ada grup yang terdaftar.')
+	            reply('📌 Grup yang menerima notifikasi:\n' + ytNotify.groups.join('\n'))
+	        } else {
+	            reply('Gunakan: .ytnotif group add|remove|list')
+	        }
+	    } else if (sub === 'test') {
+	        if (!param) return reply('Masukkan link channel / channel ID untuk dites.')
+	        try {
+	            const channelId = await resolveYoutubeChannelId(param)
+	            const latest = await fetchLatestYouTubeVideo(channelId)
+	            if (!latest || !latest.id) return reply('Gagal mengambil video terbaru, pastikan channel valid.')
+	            reply(`✅ *Test YouTube Notify*\n\nChannel: *${latest.author || latest.title || channelId}*\nJudul: *${latest.title}*\nLink: ${latest.link}`)
+	        } catch (e) {
+	            reply(`Gagal test: ${e.message}`)
+	        }
+	    } else {
+	        reply('Command tidak dikenal. Gunakan .ytnotif untuk bantuan.')
+	    }
+	}
 break
 	case 'stickerpack': {
   try {
