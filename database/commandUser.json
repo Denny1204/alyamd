@@ -1,0 +1,67 @@
+[
+  {
+    "jid": "6283166570663@s.whatsapp.net",
+    "db": [
+      {
+        "nama": "#autoaigrup",
+        "count": 16
+      },
+      {
+        "nama": "#mute",
+        "count": 20
+      },
+      {
+        "nama": "#autosimi",
+        "count": 2
+      },
+      {
+        "nama": "#hydrochat",
+        "count": 2
+      }
+    ]
+  },
+  {
+    "jid": "6283844827682@s.whatsapp.net",
+    "db": [
+      {
+        "nama": "#setwelcome",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "jid": "6285187063723@s.whatsapp.net",
+    "db": [
+      {
+        "nama": "#mute",
+        "count": 10
+      },
+      {
+        "nama": "#welcome",
+        "count": 2
+      },
+      {
+        "nama": "#left",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "jid": "62895410057557@s.whatsapp.net",
+    "db": [
+      {
+        "nama": "#mute",
+        "count": 1
+      }
+    ]
+  },
+  {
+    "jid": "31617786379@s.whatsapp.net",
+    "db": [
+      {
+        "nama": "#autoaigrup",
+        "count": 2
+      }
+    ]
+  }
+]
